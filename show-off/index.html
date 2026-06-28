@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Show-off / Understatement</title>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400&family=Cormorant+Garamond:ital,wght@0,300;1,300&display=swap" rel="stylesheet"/>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; }
+    canvas { display: block; }
+    #back {
+      position: fixed; top: 28px; left: 28px; z-index: 20;
+      display: inline-flex; align-items: center; gap: 9px;
+      padding: 11px 22px;
+      border: 1px solid rgba(250,252,253,0.3);
+      background: rgba(0,0,0,0.55); backdrop-filter: blur(8px);
+      color: rgba(250,252,253,0.85);
+      font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 400;
+      letter-spacing: 0.2em; text-transform: uppercase; text-decoration: none;
+      transition: background 0.25s, border-color 0.25s, color 0.25s;
+    }
+    #back:hover { background: rgba(255,255,255,0.08); border-color: rgba(250,252,253,0.7); color: #fff; }
+    #label {
+      position: fixed; bottom: 36px; right: 36px; z-index: 20;
+      font-family: 'Manrope', sans-serif; font-size: 10px; font-weight: 400;
+      letter-spacing: 0.28em; text-transform: uppercase; color: rgba(255,255,255,0.75);
+    }
+    #hint {
+      position: fixed; bottom: 36px; left: 50%; transform: translateX(-50%);
+      z-index: 20; font-family: 'Manrope', sans-serif; font-size: 9px;
+      letter-spacing: 0.22em; text-transform: uppercase;
+      color: rgba(255,255,255,0.35); pointer-events: none; transition: opacity 1s;
+    }
+  </style>
+</head>
+<body>
+<a id="back" href="../index.html">
+  <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.5">
+    <path d="M7 1.5L3.5 5.5 7 9.5"/>
+  </svg>
+  Zurück
+</a>
+<div id="label">Show-off / Understatement</div>
+<div id="hint">Hover &amp; click to transform</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<script>
+const ITEMS  = ['bin','book','chair','keyboard','pants','shoes'];
+const LABELS = { bin:'Mülleimer', book:'Buch', chair:'Stuhl', keyboard:'Tastatur', pants:'Hose', shoes:'Schuhe' };
+
+// ── Per-item theme colors & animation type ──────────────────────────────────
+const THEMES = {
+  bin:      { color:[180,210,180], colorMax:[255,210,60],  anim:'trash'    },
+  book:     { color:[200,200,240], colorMax:[255,200,80],  anim:'letters'  },
+  chair:    { color:[180,170,160], colorMax:[255,185,50],  anim:'dust'     },
+  keyboard: { color:[140,200,255], colorMax:[60,200,255],  anim:'sparks'   },
+  pants:    { color:[160,180,220], colorMax:[255,170,220], anim:'fabric'   },
+  shoes:    { color:[200,180,160], colorMax:[255,215,100], anim:'glitter'  },
+};
+
+// Letter chars for book animation
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789§€$&*#@!?';
+
+let imgs = {}, objects = [], loaded = 0;
+let trail = []; // mouse magic trail
+let prevMX = 0, prevMY = 0;
+
+const COLS = 3, ROWS = 2, PAD_X = 80, PAD_Y = 100;
+
+// ── Setup ───────────────────────────────────────────────────────────────────
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  imageMode(CENTER);
+  textAlign(CENTER, TOP);
+  for (const name of ITEMS) {
+    loadImage(`images/${name}_min.png`, img => { imgs[`${name}_min`] = img; checkLoaded(); });
+    loadImage(`images/${name}_max.png`, img => { imgs[`${name}_max`] = img; checkLoaded(); });
+  }
+}
+
+function checkLoaded() {
+  if (++loaded === ITEMS.length * 2) buildObjects();
+}
+
+function buildObjects() {
+  objects = [];
+  const cellW = (width - PAD_X * 2) / COLS;
+  const cellH = (height - PAD_Y * 2) / ROWS;
+  const imgH  = cellH * 0.60;
+  for (let i = 0; i < ITEMS.length; i++) {
+    const col = i % COLS, row = Math.floor(i / COLS);
+    const cx  = PAD_X + cellW * col + cellW / 2;
+    const cy  = PAD_Y + cellH * row + cellH / 2 - 10;
+    const minImg = imgs[`${ITEMS[i]}_min`];
+    const aspect = minImg.width / minImg.height;
+    objects.push({
+      name: ITEMS[i], cx, cy,
+      iw: imgH * aspect, ih: imgH,
+      morph: 0, targetMorph: 0,
+      scale: 1, targetScale: 1,
+      shimmer: 0, locked: false,
+      particles: [], rings: [],
+    });
+  }
+}
+
+// ── Mouse trail ─────────────────────────────────────────────────────────────
+function spawnTrail() {
+  const dx = mouseX - prevMX, dy = mouseY - prevMY;
+  const speed = sqrt(dx*dx + dy*dy);
+  if (speed < 2) return;
+  const count = min(4, floor(speed / 6));
+  for (let i = 0; i < count; i++) {
+    const t = i / count;
+    const hue = (frameCount * 3 + i * 30) % 360;
+    trail.push({
+      x: lerp(prevMX, mouseX, t) + random(-3, 3),
+      y: lerp(prevMY, mouseY, t) + random(-3, 3),
+      vx: random(-0.5, 0.5),
+      vy: random(-1.2, -0.2),
+      life: 1,
+      size: random(3, 8),
+      hue,
+    });
+  }
+  prevMX = mouseX; prevMY = mouseY;
+}
+
+function drawTrail() {
+  noStroke();
+  for (let i = trail.length - 1; i >= 0; i--) {
+    const p = trail[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vx *= 0.96; p.vy *= 0.96;
+    p.life -= 0.032;
+    if (p.life <= 0) { trail.splice(i, 1); continue; }
+    const a = p.life * p.life * 200;
+    colorMode(HSB, 360, 100, 100, 255);
+    fill(p.hue, 80, 100, a);
+    colorMode(RGB, 255);
+    const s = p.size * p.life;
+    ellipse(p.x, p.y, s);
+    // tiny star cross
+    if (p.life > 0.5 && p.size > 5) {
+      stroke(255, 255, 255, a * 0.4);
+      strokeWeight(0.5);
+      line(p.x - s, p.y, p.x + s, p.y);
+      line(p.x, p.y - s, p.x, p.y + s);
+      noStroke();
+    }
+  }
+}
+
+// ── Click ────────────────────────────────────────────────────────────────────
+function mousePressed() {
+  if (objects.length === 0) return;
+  for (const obj of objects) {
+    const hw = obj.iw/2+30, hh = obj.ih/2+30;
+    if (mouseX > obj.cx-hw && mouseX < obj.cx+hw && mouseY > obj.cy-hh && mouseY < obj.cy+hh) {
+      obj.locked = !obj.locked;
+      triggerBurst(obj, obj.locked);
+    }
+  }
+}
+
+function triggerBurst(obj, isMax) {
+  obj.shimmer = 1;
+  const th = THEMES[obj.name];
+  const c  = isMax ? th.colorMax : th.color;
+  const n  = isMax ? 70 : 30;
+  for (let i = 0; i < n; i++) {
+    const angle = random(TWO_PI);
+    const spd   = random(2, isMax ? 10 : 5);
+    obj.particles.push(makeParticle(obj, cos(angle)*spd, sin(angle)*spd, c, isMax, true));
+  }
+  const rings = isMax ? 3 : 1;
+  for (let i = 0; i < rings; i++) {
+    obj.rings.push({ r:10, maxR: isMax ? 230 : 120, life:1, delay: i*7, c, isMax });
+  }
+}
+
+// ── Per-item particle factory ─────────────────────────────────────────────────
+function makeParticle(obj, vx, vy, c, isMax, burst=false) {
+  const anim = THEMES[obj.name].anim;
+  const base = {
+    x: obj.cx + random(-obj.iw*0.35, obj.iw*0.35),
+    y: obj.cy + random(-obj.ih*0.35, obj.ih*0.35),
+    vx, vy, life: burst ? random(0.7,1) : random(0.5,1),
+    size: random(1.5, burst ? 6 : 3.5),
+    c, anim,
+    angle: random(TWO_PI), spin: random(-0.15, 0.15),
+    char: LETTERS[floor(random(LETTERS.length))],
+  };
+  return base;
+}
+
+function spawnIdleParticle(obj) {
+  const m  = obj.morph;
+  const th = THEMES[obj.name];
+  const c  = m > 0.5 ? th.colorMax : th.color;
+  const vx = random(-0.5, 0.5);
+  const vy = random(-1.8, -0.3);
+  obj.particles.push(makeParticle(obj, vx, vy, c, m > 0.5));
+}
+
+// ── Draw one particle by its anim type ───────────────────────────────────────
+function drawParticle(p) {
+  const a = p.life * p.life * 220;
+  push();
+  translate(p.x, p.y);
+  rotate(p.angle);
+  noStroke();
+
+  switch (p.anim) {
+
+    case 'trash': // bin: crumpled paper scraps — small grey/yellow rects
+      fill(p.c[0], p.c[1], p.c[2], a);
+      rect(-p.size*0.8, -p.size*0.5, p.size*1.6, p.size, 1);
+      break;
+
+    case 'letters': // book: floating characters
+      fill(p.c[0], p.c[1], p.c[2], a);
+      textSize(p.size * 2.2);
+      textAlign(CENTER, CENTER);
+      text(p.char, 0, 0);
+      break;
+
+    case 'dust': // chair: soft dust motes
+      drawingContext.shadowBlur  = p.size * 3;
+      drawingContext.shadowColor = `rgba(${p.c[0]},${p.c[1]},${p.c[2]},0.4)`;
+      fill(p.c[0], p.c[1], p.c[2], a * 0.7);
+      ellipse(0, 0, p.size * 2, p.size);
+      drawingContext.shadowBlur = 0;
+      break;
+
+    case 'sparks': // keyboard: sharp electric lines
+      stroke(p.c[0], p.c[1], p.c[2], a);
+      strokeWeight(1.2);
+      const len = p.size * 3;
+      line(-len, 0, 0, -p.size * 0.5);
+      line(0, -p.size * 0.5, len * 0.6, 0);
+      noStroke();
+      fill(255, 255, 255, a * 0.6);
+      ellipse(0, 0, p.size * 0.6);
+      break;
+
+    case 'fabric': // pants: thin curved strokes (wave lines)
+      stroke(p.c[0], p.c[1], p.c[2], a);
+      strokeWeight(1.5);
+      noFill();
+      beginShape();
+      for (let i = -3; i <= 3; i++) {
+        curveVertex(i * p.size * 0.9, sin(i * 0.9 + p.angle) * p.size * 0.7);
+      }
+      endShape();
+      noStroke();
+      break;
+
+    case 'glitter': // shoes: tiny sharp 4-pointed stars
+      fill(p.c[0], p.c[1], p.c[2], a);
+      const s = p.size;
+      beginShape();
+      for (let k = 0; k < 8; k++) {
+        const r2 = k % 2 === 0 ? s : s * 0.3;
+        const ang = (k / 8) * TWO_PI;
+        vertex(cos(ang)*r2, sin(ang)*r2);
+      }
+      endShape(CLOSE);
+      break;
+  }
+  pop();
+}
+
+// ── Main draw ────────────────────────────────────────────────────────────────
+function draw() {
+  background(0);
+
+  if (objects.length === 0) {
+    fill(255,255,255,60); noStroke(); textSize(11);
+    text('loading…', width/2, height/2);
+    return;
+  }
+
+  spawnTrail();
+  drawTrail();
+
+  const mx = mouseX, my = mouseY;
+
+  for (const obj of objects) {
+    const hw = obj.iw/2+24, hh = obj.ih/2+24;
+    const hovering = mx > obj.cx-hw && mx < obj.cx+hw && my > obj.cy-hh && my < obj.cy+hh;
+
+    obj.targetMorph = (hovering || obj.locked) ? 1 : 0;
+    obj.morph  += (obj.targetMorph - obj.morph) * (obj.locked ? 0.12 : 0.07);
+    obj.targetScale = hovering ? 1.07 : (obj.locked ? 1.04 : 1.0);
+    obj.scale  += (obj.targetScale - obj.scale) * 0.1;
+    obj.shimmer *= 0.88;
+
+    // Idle particle spawn rate varies by type
+    const rate = obj.locked ? 0.22 : (hovering ? obj.morph * 0.3 : 0);
+    if (random() < rate) spawnIdleParticle(obj);
+
+    // Extra per-item continuous effect when locked
+    if (obj.locked) spawnItemEffect(obj);
+
+    // Rings
+    noFill();
+    for (let j = obj.rings.length-1; j >= 0; j--) {
+      const rg = obj.rings[j];
+      if (rg.delay-- > 0) continue;
+      rg.r   += (rg.maxR - rg.r) * 0.06;
+      rg.life -= 0.028;
+      if (rg.life <= 0) { obj.rings.splice(j,1); continue; }
+      stroke(rg.c[0], rg.c[1], rg.c[2], rg.life * 190);
+      strokeWeight(rg.isMax ? 1.8 : 1);
+      ellipse(obj.cx, obj.cy, rg.r * 2, rg.r * 1.25);
+    }
+    noStroke();
+
+    // Particles
+    for (let j = obj.particles.length-1; j >= 0; j--) {
+      const p = obj.particles[j];
+      p.x += p.vx; p.y += p.vy;
+      p.vx *= 0.94; p.vy *= 0.94;
+      p.angle += p.spin;
+      p.life -= 0.022;
+      if (p.life <= 0) { obj.particles.splice(j,1); continue; }
+      drawParticle(p);
+    }
+
+    drawObject(obj);
+  }
+
+  document.getElementById('hint').style.opacity = objects.some(o => o.morph > 0.05) ? '0' : '1';
+}
+
+// Extra signature effects per item when locked ──────────────────────────────
+function spawnItemEffect(obj) {
+  const anim = THEMES[obj.name].anim;
+  const th   = THEMES[obj.name];
+
+  if (anim === 'sparks' && random() < 0.3) {
+    // keyboard: arcing lightning bolt between two random points on the object
+    obj.particles.push({
+      x: obj.cx + random(-obj.iw*0.4, obj.iw*0.4),
+      y: obj.cy + random(-obj.ih*0.4, obj.ih*0.4),
+      vx: random(-1,1), vy: random(-2,-0.5),
+      life: random(0.4,0.8), size: random(3,7),
+      c: th.colorMax, anim: 'sparks',
+      angle: random(TWO_PI), spin: random(-0.2,0.2), char: '',
+    });
+  }
+
+  if (anim === 'glitter' && random() < 0.25) {
+    // shoes: drift glitter upward from bottom
+    obj.particles.push({
+      x: obj.cx + random(-obj.iw*0.5, obj.iw*0.5),
+      y: obj.cy + obj.ih*0.45,
+      vx: random(-0.8,0.8), vy: random(-2,-0.5),
+      life: random(0.6,1), size: random(2,5),
+      c: th.colorMax, anim: 'glitter',
+      angle: random(TWO_PI), spin: random(-0.3,0.3), char: '',
+    });
+  }
+
+  if (anim === 'letters' && random() < 0.2) {
+    // book: letters swirl in orbit
+    const angle = random(TWO_PI);
+    const r = random(obj.iw*0.5, obj.iw*0.8);
+    obj.particles.push({
+      x: obj.cx + cos(angle)*r,
+      y: obj.cy + sin(angle)*r*0.6,
+      vx: -sin(angle)*1.2, vy: cos(angle)*0.6,
+      life: random(0.7,1), size: random(3,5),
+      c: th.colorMax, anim: 'letters',
+      angle: 0, spin: 0,
+      char: LETTERS[floor(random(LETTERS.length))],
+    });
+  }
+}
+
+// ── Draw one object ──────────────────────────────────────────────────────────
+function drawObject(obj) {
+  const m = obj.morph;
+  const minImg = imgs[`${obj.name}_min`];
+  const maxImg = imgs[`${obj.name}_max`];
+  if (!minImg || !maxImg) return;
+
+  const th = THEMES[obj.name];
+  const c  = m > 0.5 ? th.colorMax : th.color;
+
+  push();
+  translate(obj.cx, obj.cy);
+  scale(obj.scale);
+
+  const maxAspect = maxImg.width / maxImg.height;
+  const minAspect = minImg.width / minImg.height;
+  const iw = obj.ih * lerp(minAspect, maxAspect, m);
+
+  // Glow — use item color
+  if (m > 0.01) {
+    drawingContext.shadowBlur  = m * 80 + obj.shimmer * 50;
+    drawingContext.shadowColor = `rgba(${c[0]},${c[1]},${c[2]},${0.55 + obj.shimmer*0.45})`;
+  }
+
+  tint(255, 255, 255, 255 * (1-m));
+  image(minImg, 0, 0, iw, obj.ih);
+
+  tint(255, 255, 255, 255 * m);
+  image(maxImg, 0, 0, iw, obj.ih);
+
+  noTint();
+  drawingContext.shadowBlur = 0;
+
+  // Label
+  noStroke();
+  textFont('Manrope');
+  const stateLabel = obj.locked ? '★ show-off' : (m < 0.5 ? 'understatement' : 'show-off');
+  fill(c[0], c[1], c[2], obj.locked ? 255 : 80 + m*140);
+  textSize(9); textAlign(CENTER, TOP);
+  text(stateLabel, 0, obj.ih/2 + 14);
+  fill(255,255,255,110);
+  textSize(8);
+  text(LABELS[obj.name].toUpperCase(), 0, obj.ih/2 + 28);
+  pop();
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  buildObjects();
+}
+</script>
+</body>
+</html>
