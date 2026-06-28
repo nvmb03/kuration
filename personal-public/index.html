@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personal / Public</title>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500&family=Cormorant+Garamond:ital,wght@0,300;1,300&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --ink: #0a0f1a;
+      --arctic: #fafcfd;
+      --border: rgba(250,252,253,0.1);
+      --dim: rgba(250,252,253,0.45);
+      --gold: #f0c050;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--ink);
+      color: var(--arctic);
+      font-family: 'Manrope', sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Top bar ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      height: 52px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      z-index: 30;
+      background: rgba(10,15,26,0.95);
+      backdrop-filter: blur(12px);
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+    }
+    #back {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 7px 16px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--dim);
+      font-family: 'Manrope', sans-serif;
+      font-size: 10px; font-weight: 400;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      text-decoration: none;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    #back:hover { border-color: rgba(250,252,253,0.4); color: var(--arctic); }
+
+    .header-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 17px; font-weight: 300;
+      letter-spacing: 0.1em;
+      color: var(--arctic);
+    }
+    .header-subtitle {
+      font-size: 9px; letter-spacing: 0.3em;
+      text-transform: uppercase; color: var(--dim);
+    }
+    .header-right {
+      display: flex; align-items: center; gap: 16px;
+    }
+    #item-count {
+      font-size: 9px; letter-spacing: 0.25em;
+      text-transform: uppercase; color: var(--dim);
+    }
+    #clear-btn {
+      padding: 7px 16px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--dim);
+      font-family: 'Manrope', sans-serif;
+      font-size: 10px; letter-spacing: 0.18em;
+      text-transform: uppercase; cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    #clear-btn:hover { border-color: rgba(220,80,60,0.5); color: rgba(255,120,100,0.9); }
+
+    /* ── Main layout ── */
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Room canvas ── */
+    #room {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      cursor: crosshair;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+    }
+    #room-inner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      max-width: 860px;
+    }
+    #room-img {
+      width: 100%; height: 100%;
+      object-fit: contain;
+      display: block;
+      pointer-events: none;
+      user-select: none;
+    }
+    /* Subtle vignette */
+    #room-inner::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at center, transparent 50%, rgba(10,15,26,0.4) 100%);
+      pointer-events: none;
+    }
+    /* Drop zone highlight */
+    #room-inner.drag-over::before {
+      content: '';
+      position: absolute; inset: 0;
+      border: 2px dashed rgba(240,192,80,0.4);
+      z-index: 10; pointer-events: none;
+    }
+
+    /* Dropped items on the room */
+    .placed-item {
+      position: absolute;
+      cursor: grab;
+      user-select: none;
+      transform-origin: bottom center;
+      transition: filter 0.15s;
+      z-index: 20;
+    }
+    .placed-item:active { cursor: grabbing; }
+    .placed-item img {
+      height: var(--placed-h);
+      width: auto;
+      display: block;
+      filter: drop-shadow(0 8px 28px rgba(0,0,0,0.8)) brightness(1.2);
+      pointer-events: none;
+    }
+    .placed-item:hover img {
+      filter: drop-shadow(0 8px 28px rgba(0,0,0,0.8)) brightness(1.35);
+    }
+    .placed-item .remove-btn {
+      position: absolute;
+      top: -10px; right: -10px;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: rgba(10,15,26,0.9);
+      border: 1px solid var(--border);
+      color: var(--dim);
+      font-size: 11px; line-height: 22px;
+      text-align: center; cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 25;
+    }
+    .placed-item:hover .remove-btn { opacity: 1; }
+    .placed-item .remove-btn:hover { background: rgba(220,60,60,0.8); color: #fff; border-color: transparent; }
+
+    /* ── Shop sidebar ── */
+    #shop {
+      width: 420px;
+      flex-shrink: 0;
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: rgba(10,15,26,0.97);
+    }
+    .shop-header {
+      padding: 20px 22px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .shop-label {
+      font-size: 8px; letter-spacing: 0.35em;
+      text-transform: uppercase; color: var(--dim);
+      margin-bottom: 6px;
+    }
+    .shop-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px; font-weight: 300;
+      letter-spacing: 0.05em;
+    }
+    .shop-desc {
+      margin-top: 8px;
+      font-size: 9px; line-height: 1.7;
+      color: var(--dim); letter-spacing: 0.03em;
+    }
+    .items-grid {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(250,252,253,0.1) transparent;
+    }
+
+    /* ── Shop item card ── */
+    .shop-item {
+      border: 1px solid var(--border);
+      padding: 14px 10px 10px;
+      cursor: grab;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+      user-select: none;
+      -webkit-user-drag: element;
+    }
+    .shop-item:active { cursor: grabbing; }
+    .shop-item:hover {
+      border-color: rgba(240,192,80,0.35);
+      background: rgba(240,192,80,0.04);
+    }
+    .shop-item img {
+      height: 88px; width: auto;
+      object-fit: contain;
+      pointer-events: none;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5)) brightness(1.15);
+    }
+    .item-info { width: 100%; }
+    .item-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 13px; font-weight: 300;
+      letter-spacing: 0.04em;
+      color: var(--arctic);
+    }
+    .item-sub {
+      font-size: 8px; letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-top: 2px;
+    }
+    .item-price {
+      font-size: 11px; letter-spacing: 0.05em;
+      color: var(--gold);
+      margin-top: 4px;
+    }
+
+    /* ── Footer note ── */
+    .shop-footer {
+      padding: 12px 22px;
+      border-top: 1px solid var(--border);
+      font-size: 8px; letter-spacing: 0.18em;
+      color: rgba(250,252,253,0.2);
+      text-transform: uppercase;
+    }
+
+    /* Placeholder when no image */
+    #no-image {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 12px;
+      color: var(--dim);
+      font-size: 11px; letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+    #no-image svg { opacity: 0.2; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="header-left">
+    <a id="back" href="../index.html">
+      <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M7 1.5L3.5 5.5 7 9.5"/>
+      </svg>
+      Zurück
+    </a>
+    <div>
+      <div class="header-title">Personal / Public</div>
+      <div class="header-subtitle">Einrichtungsberatung für Außenräume</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span id="item-count">0 Artikel platziert</span>
+    <button id="clear-btn">Raum leeren</button>
+  </div>
+</header>
+
+<!-- Main -->
+<div class="main">
+
+  <!-- Room -->
+  <div id="room">
+    <div id="room-inner">
+      <img id="room-img" src="images/wiese.jpg" alt="Mein Wohnzimmer"
+           onerror="this.style.display='none'; document.getElementById('no-image').style.display='flex'"/>
+      <div id="no-image" style="display:none">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="4" y="10" width="40" height="28" rx="2"/>
+          <circle cx="18" cy="22" r="5"/>
+          <path d="M4 32l10-10 8 8 6-6 10 10"/>
+        </svg>
+        <span>Bild einfügen: personal-public/images/wiese.jpg</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shop sidebar -->
+  <aside id="shop">
+    <div class="shop-header">
+      <div class="shop-label">Kollektion SS 2026</div>
+      <div class="shop-title">Wiese & Wohnen</div>
+      <div class="shop-desc">
+        Curated für das zeitgenössische Alpinzimmer.<br>
+        Ziehen Sie Artikel in Ihren Raum.
+      </div>
+    </div>
+
+    <div class="items-grid" id="items-grid">
+      <!-- dynamically inserted -->
+    </div>
+
+    <div class="shop-footer">
+      Alle Preise inkl. MwSt. · Lieferung: sofort
+    </div>
+  </aside>
+</div>
+
+<script>
+// ── Catalog ──────────────────────────────────────────────────────────────────
+const CATALOG = [
+  { id:'chair',    img:'../show-off/images/chair_max.png',    name:'FJÄLLSTOL',   sub:'Almensessel',        price:'€ 2.890',  size:160 },
+  { id:'shoes',    img:'../show-off/images/shoes_max.png',    name:'BERGLÄUFER',  sub:'Ledersohlensystem',  price:'€ 890',    size:110 },
+  { id:'bin',      img:'../show-off/images/bin_max.png',      name:'NATURKORB',   sub:'Wiesenarchiv',       price:'€ 340',    size:120 },
+  { id:'book',     img:'../show-off/images/book_max.png',     name:'GRASBIBEL',   sub:'Leseliteratur',      price:'€ 180',    size:100 },
+  { id:'keyboard', img:'../show-off/images/keyboard_max.png', name:'ALPTASTATUR', sub:'Wireless, Bergluft', price:'€ 1.290',  size:100 },
+  { id:'pants',    img:'../show-off/images/pants_max.png',    name:'HÜGELHOSE',   sub:'Hanfmischgewebe',    price:'€ 620',    size:130 },
+  // SVG-only items
+  { id:'lamp',     img:null, svg:'lamp',                      name:'ALMLEUCHTE',  sub:'Solarenergie',       price:'€ 490',    size:150 },
+  { id:'plant',    img:null, svg:'plant',                     name:'WILDBLUME',   sub:'Heimisch, Bio',      price:'€ 60',     size:120 },
+  { id:'sofa',     img:null, svg:'sofa',                      name:'ALMSOFA',     sub:'Moosbezug',          price:'€ 4.200',  size:150 },
+  { id:'rug',      img:null, svg:'rug',                       name:'GRASFLOR',    sub:'Handgewebt, Alm',    price:'€ 780',    size:120 },
+];
+
+// SVG icons for items without photos
+const SVGS = {
+  lamp: `<svg viewBox="0 0 60 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="30" cy="108" rx="14" ry="4" fill="rgba(255,255,255,0.4)"/>
+    <rect x="28" y="50" width="4" height="58" fill="rgba(255,255,255,0.9)"/>
+    <polygon points="10,50 50,50 42,18 18,18" fill="rgba(240,192,80,1)"/>
+    <ellipse cx="30" cy="18" rx="14" ry="4" fill="rgba(240,192,80,0.85)"/>
+    <ellipse cx="30" cy="50" rx="20" ry="5" fill="rgba(240,192,80,0.6)"/>
+  </svg>`,
+
+  plant: `<svg viewBox="0 0 60 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="30" cy="108" rx="12" ry="5" fill="rgba(255,255,255,0.45)"/>
+    <rect x="24" y="75" width="12" height="33" rx="3" fill="rgba(160,130,100,1)"/>
+    <path d="M30 75 Q18 55 22 38 Q30 45 30 60" fill="rgba(100,180,80,1)"/>
+    <path d="M30 70 Q42 50 38 33 Q30 40 30 58" fill="rgba(80,170,60,1)"/>
+    <path d="M30 65 Q30 45 30 30" stroke="rgba(100,180,80,0.9)" stroke-width="2"/>
+    <path d="M30 80 Q14 70 10 55 Q22 58 30 72" fill="rgba(130,190,90,1)"/>
+    <path d="M30 80 Q46 70 50 55 Q38 58 30 72" fill="rgba(100,175,65,1)"/>
+  </svg>`,
+
+  sofa: `<svg viewBox="0 0 140 70" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="0" y="55" width="140" height="10" rx="3" fill="rgba(255,255,255,0.5)"/>
+    <rect x="5" y="28" width="130" height="30" rx="6" fill="rgba(200,180,160,1)"/>
+    <rect x="5" y="15" width="130" height="18" rx="5" fill="rgba(220,200,180,1)"/>
+    <rect x="2" y="20" width="20" height="38" rx="5" fill="rgba(215,195,175,1)"/>
+    <rect x="118" y="20" width="20" height="38" rx="5" fill="rgba(215,195,175,1)"/>
+    <rect x="10" y="55" width="12" height="10" rx="2" fill="rgba(255,255,255,0.4)"/>
+    <rect x="118" y="55" width="12" height="10" rx="2" fill="rgba(255,255,255,0.4)"/>
+  </svg>`,
+
+  rug: `<svg viewBox="0 0 160 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="80" cy="30" rx="78" ry="26" fill="rgba(160,115,90,1)"/>
+    <ellipse cx="80" cy="30" rx="64" ry="21" fill="rgba(180,135,105,0.9)" stroke="rgba(255,220,160,0.7)" stroke-width="1.5"/>
+    <ellipse cx="80" cy="30" rx="48" ry="15" fill="none" stroke="rgba(255,220,160,0.8)" stroke-width="2"/>
+    <ellipse cx="80" cy="30" rx="32" ry="10" fill="none" stroke="rgba(255,220,160,0.7)" stroke-width="1.5"/>
+    <ellipse cx="80" cy="30" rx="16" ry="5" fill="rgba(220,180,140,0.95)"/>
+    <line x1="2" y1="30" x2="20" y2="30" stroke="rgba(255,220,160,0.6)" stroke-width="1.5"/>
+    <line x1="140" y1="30" x2="158" y2="30" stroke="rgba(255,220,160,0.6)" stroke-width="1.5"/>
+  </svg>`,
+};
+
+// ── Render catalog ────────────────────────────────────────────────────────────
+const grid = document.getElementById('items-grid');
+
+for (const item of CATALOG) {
+  const card = document.createElement('div');
+  card.className = 'shop-item';
+  card.draggable = true;
+  card.dataset.id = item.id;
+
+  let imgEl;
+  if (item.img) {
+    imgEl = `<img src="${item.img}" alt="${item.name}" draggable="false"/>`;
+  } else {
+    imgEl = `<div style="height:72px;width:72px;display:flex;align-items:flex-end;justify-content:center">${SVGS[item.svg]}</div>`;
+  }
+
+  card.innerHTML = `
+    ${imgEl}
+    <div class="item-info">
+      <div class="item-name">${item.name}</div>
+      <div class="item-sub">${item.sub}</div>
+      <div class="item-price">${item.price}</div>
+    </div>`;
+
+  card.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('itemId', item.id);
+    e.dataTransfer.effectAllowed = 'copy';
+    // Store offset within the card
+    const r = card.getBoundingClientRect();
+    e.dataTransfer.setData('offsetX', e.clientX - r.left - r.width/2);
+    e.dataTransfer.setData('offsetY', e.clientY - r.top);
+  });
+
+  grid.appendChild(card);
+}
+
+// ── Drop zone ─────────────────────────────────────────────────────────────────
+const room      = document.getElementById('room');
+const roomInner = document.getElementById('room-inner');
+let placedCount = 0;
+
+roomInner.addEventListener('dragover', e => {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+  roomInner.classList.add('drag-over');
+});
+roomInner.addEventListener('dragleave', () => roomInner.classList.remove('drag-over'));
+
+roomInner.addEventListener('drop', e => {
+  e.preventDefault();
+  roomInner.classList.remove('drag-over');
+
+  const id  = e.dataTransfer.getData('itemId');
+  const item = CATALOG.find(i => i.id === id);
+  if (!item) return;
+
+  const rx = e.clientX - roomInner.getBoundingClientRect().left;
+  const ry = e.clientY - roomInner.getBoundingClientRect().top;
+
+  placeItem(item, rx, ry);
+});
+
+function placeItem(item, x, y) {
+  const el = document.createElement('div');
+  el.className = 'placed-item';
+  el.style.setProperty('--placed-h', item.size + 'px');
+
+  let content;
+  if (item.img) {
+    content = `<img src="${item.img}" alt="${item.name}" draggable="false"/>`;
+  } else {
+    content = `<div style="height:${item.size}px;width:${Math.round(item.size*1.2)}px">${SVGS[item.svg]}</div>`;
+  }
+
+  const badge = `<div style="
+    position:absolute; bottom:-22px; left:50%; transform:translateX(-50%);
+    white-space:nowrap; font-size:8px; letter-spacing:0.2em; text-transform:uppercase;
+    color:rgba(255,255,255,0.5); pointer-events:none;">
+    ${item.name}
+  </div>`;
+
+  el.innerHTML = `
+    <button class="remove-btn" title="Entfernen">×</button>
+    ${content}
+    ${badge}`;
+
+  // Center horizontally on drop point, anchor bottom
+  el.style.left = (x - item.size * 0.4) + 'px';
+  el.style.top  = (y - item.size) + 'px';
+
+  // Make placed item draggable within the room
+  makeDraggableInRoom(el);
+
+  el.querySelector('.remove-btn').addEventListener('click', () => {
+    el.remove();
+    placedCount--;
+    updateCount();
+  });
+
+  roomInner.appendChild(el);
+  placedCount++;
+  updateCount();
+
+  // Entrance animation
+  el.style.opacity = '0';
+  el.style.transform = 'scale(0.7)';
+  el.style.transition = 'opacity 0.25s, transform 0.3s cubic-bezier(0.34,1.56,0.64,1)';
+  requestAnimationFrame(() => {
+    el.style.opacity = '1';
+    el.style.transform = 'scale(1)';
+  });
+}
+
+function makeDraggableInRoom(el) {
+  let startX, startY, startLeft, startTop;
+
+  el.addEventListener('mousedown', e => {
+    if (e.target.classList.contains('remove-btn')) return;
+    e.preventDefault();
+    startX    = e.clientX;
+    startY    = e.clientY;
+    startLeft = parseInt(el.style.left);
+    startTop  = parseInt(el.style.top);
+    el.style.transition = 'none';
+    el.style.zIndex = 50;
+
+    const onMove = ev => {
+      el.style.left = (startLeft + ev.clientX - startX) + 'px';
+      el.style.top  = (startTop  + ev.clientY - startY) + 'px';
+    };
+    const onUp = () => {
+      el.style.zIndex = 20;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+}
+
+function updateCount() {
+  const el = document.getElementById('item-count');
+  el.textContent = placedCount === 0
+    ? '0 Artikel platziert'
+    : `${placedCount} Artikel platziert`;
+}
+
+document.getElementById('clear-btn').addEventListener('click', () => {
+  document.querySelectorAll('.placed-item').forEach(el => el.remove());
+  placedCount = 0;
+  updateCount();
+});
+</script>
+</body>
+</html>
