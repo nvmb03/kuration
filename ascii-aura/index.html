@@ -12,8 +12,8 @@
 
     #back {
       position: fixed;
-      bottom: 32px;
-      left: 36px;
+      top: 28px;
+      left: 28px;
       z-index: 20;
       display: inline-flex;
       align-items: center;
@@ -43,11 +43,11 @@
       right: 36px;
       z-index: 20;
       font-family: 'Manrope', sans-serif;
-      font-size: 9px;
-      font-weight: 300;
-      letter-spacing: 0.3em;
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.28em;
       text-transform: uppercase;
-      color: rgba(255,140,40,0.2);
+      color: rgba(255,255,255,0.75);
     }
   </style>
 </head>
@@ -152,8 +152,8 @@ function density(ch) {
 
 let ROWS, COLS, CW, CH, OX, OY;
 
-const SWEEP_FRAMES = 600;  // 10 s cycle
-const BAND_WIDTH   = 0.13; // wider band = more visible
+const SWEEP_FRAMES = 280;  // ~4.5 s cycle — schneller
+const BAND_WIDTH   = 0.16; // breiter und kräftiger
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -213,13 +213,13 @@ function draw() {
       const sBase = 52 + t0 * 34;
       const lBase = 16 + t0 * 44;
 
-      // inside band: push toward bright white-amber
-      const lFill = lBase + sweepBoost * (94 - lBase);
-      const sFill = sBase * (1 - sweepBoost * 0.75);
+      // inside band: push hard toward bright white
+      const lFill = lBase + sweepBoost * (98 - lBase);
+      const sFill = sBase * (1 - sweepBoost * 0.9);
 
       if (sweepBoost > 0.01) {
-        drawingContext.shadowBlur  = sweepBoost * 32;
-        drawingContext.shadowColor = `rgba(255,220,160,${sweepBoost * 0.95})`;
+        drawingContext.shadowBlur  = sweepBoost * 45;
+        drawingContext.shadowColor = `rgba(255,235,180,${sweepBoost})`;
       } else {
         drawingContext.shadowBlur  = t0 * 5;
         drawingContext.shadowColor = `hsl(20,80%,28%)`;
