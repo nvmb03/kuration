@@ -173,10 +173,13 @@ function calcLayout() {
   OY = (height - ROWS * CH) / 2;
 }
 
+// Mouse glow radius in pixels
+const MOUSE_RADIUS = 120;
+
 function draw() {
   background(0);
 
-  const sweep = (frameCount % SWEEP_FRAMES) / SWEEP_FRAMES; // 0..1
+  const sweep = (frameCount % SWEEP_FRAMES) / SWEEP_FRAMES;
 
   textSize(CW * 1.04);
 
@@ -191,41 +194,61 @@ function draw() {
       const x = OX + c * CW;
       const y = OY + r * CH;
 
+      // Mouse proximity boost — center of this cell
+      const cx = x + CW * 0.5;
+      const cy = y + CH * 0.5;
+      const mdx = cx - mouseX, mdy = cy - mouseY;
+      const mDist = sqrt(mdx * mdx + mdy * mdy);
+      const mRaw  = max(0, 1 - mDist / MOUSE_RADIUS);
+      const mouseBoost = mRaw * mRaw; // quadratic — strong but smooth
+
       if (d < 0.38) {
-        drawingContext.shadowBlur = 0;
-        fill(`hsl(10,5%,${d * 13}%)`);
+        if (mouseBoost > 0.01) {
+          // Light up background chars near mouse too, subtly
+          drawingContext.shadowBlur  = mouseBoost * 40;
+          drawingContext.shadowColor = `rgba(255,220,140,${mouseBoost})`;
+          fill(`hsl(10,30%,${d * 13 + mouseBoost * 40}%)`);
+        } else {
+          drawingContext.shadowBlur = 0;
+          fill(`hsl(10,5%,${d * 13}%)`);
+        }
         text(ch, x, y);
         continue;
       }
 
       const t0 = (d - 0.38) / 0.62;
 
-      // diagonal projection 0..1 across the figure
+      // Diagonal sweep
       const proj = (c / COLS + r / ROWS) / 2;
-
-      // distance from sweep band, with wrap
       const raw  = abs(proj - sweep);
       const dist = min(raw, abs(raw - 1));
       const inBand     = max(0, 1 - dist / BAND_WIDTH);
-      const sweepBoost = inBand * inBand; // sharper falloff
+      const sweepBoost = inBand * inBand;
+
+      // Combine sweep and mouse
+      const combined = min(1, sweepBoost + mouseBoost * 1.1);
 
       const hBase = 8  + t0 * 28;
       const sBase = 52 + t0 * 34;
       const lBase = 16 + t0 * 44;
 
-      // inside band: push hard toward bright white
-      const lFill = lBase + sweepBoost * (98 - lBase);
-      const sFill = sBase * (1 - sweepBoost * 0.9);
+      const lFill = lBase + combined * (98 - lBase);
+      const sFill = sBase * (1 - combined * 0.9);
 
-      if (sweepBoost > 0.01) {
-        drawingContext.shadowBlur  = sweepBoost * 45;
-        drawingContext.shadowColor = `rgba(255,235,180,${sweepBoost})`;
+      if (combined > 0.01) {
+        // Mouse glow is slightly cooler/whiter than the amber sweep
+        const isMouseDom = mouseBoost > sweepBoost;
+        const glowColor  = isMouseDom
+          ? `rgba(220,240,255,${combined})`
+          : `rgba(255,235,180,${combined})`;
+        drawingContext.shadowBlur  = combined * 80;
+        drawingContext.shadowColor = glowColor;
       } else {
         drawingContext.shadowBlur  = t0 * 5;
         drawingContext.shadowColor = `hsl(20,80%,28%)`;
       }
 
-      fill(`hsl(${hBase},${sFill}%,${min(lFill, 94)}%)`);
+      fill(`hsl(${hBase},${sFill}%,${min(lFill, 96)}%)`);
       text(ch, x, y);
     }
   }
