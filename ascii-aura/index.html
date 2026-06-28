@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASCII Aura — Echo Arts</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; font-family: monospace; }
+    canvas { display: block; }
+    #label {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(140, 80, 255, 0.45);
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+<div id="label">echo arts — figure study — ascii aura</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<script>
+// ─────────────────────────────────────────────
+//  BODY TEMPLATE  (back view, seated figure)
+//  ' ' = empty   '1' = faint edge   '2' = mid   '3' = dense core
+// ─────────────────────────────────────────────
+const RAW = [
+  "            1111111111              ",
+  "          11333333333311            ",
+  "         1133333333333311           ",
+  "        113333333333333311          ",
+  "        113322222222333311          ",
+  "         113332222233311            ",
+  "         1133333333333311           ",
+  "       1111333333333333111          ",
+  "      11333333333333333333 1        ",
+  "     1133333333333333333333 1       ",
+  "     1133333333333333333333 1       ",
+  "      113333333333333333331         ",
+  "       11333333333333333311         ",
+  "        1133332222233333 1          ",
+  "         11332222222331             ",
+  "          1133333333311             ",
+  "           113333333311             ",
+  "            1133333311              ",
+  "             11333311               ",
+  "              113311                ",
+  "               1111                 ",
+  "                11                  ",
+];
+
+// ─── ASCII character sets by density ───
+const CHARS = {
+  3: '@#%&WMB8$',   // dense / core
+  2: 'NHXKdbo0qp',  // mid
+  1: '*+=~-:;,.',   // faint / edge
+};
+
+const AURA_CHARS = ['·','∘','°','⋆','˚','✦','✧','⊹','✺','∴','∵','⁕','※'];
+
+// ─── Colour palettes per zone ───
+const PALETTE = {
+  core:  { h: 195, s: 70, l: 85 },  // cold white-cyan
+  mid:   { h: 220, s: 80, l: 65 },  // blue
+  edge:  { h: 270, s: 85, l: 60 },  // violet
+  aura:  [
+    { h: 260, s: 90, l: 70 },  // purple
+    { h: 290, s: 85, l: 65 },  // pink-violet
+    { h: 200, s: 95, l: 70 },  // cyan
+    { h: 320, s: 80, l: 68 },  // pink
+    { h: 180, s: 90, l: 65 },  // teal
+  ],
+};
+
+// ─────────────────────────────────────────────
+let particles = [];
+let bodyGrid  = [];   // { r, c, density }
+let edgeCells = [];
+let CW = 14, CH = 17; // cell pixel size
+let OX, OY;           // origin offset
+let COLS, ROWS;
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  textFont('Courier New');
+  noStroke();
+  buildGrid();
+}
+
+function buildGrid() {
+  ROWS = RAW.length;
+  COLS = RAW[0].length;
+  OX   = (width  - COLS * CW) / 2;
+  OY   = (height - ROWS * CH) / 2;
+
+  bodyGrid  = [];
+  edgeCells = [];
+
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const ch = RAW[r][c];
+      if (ch === ' ') continue;
+      const density = parseInt(ch);
+      bodyGrid.push({ r, c, density });
+    }
+  }
+
+  // detect edge cells (at least one empty neighbour)
+  const occupied = new Set(bodyGrid.map(b => b.r + ',' + b.c));
+  for (const b of bodyGrid) {
+    const nbrs = [
+      [b.r-1,b.c],[b.r+1,b.c],[b.r,b.c-1],[b.r,b.c+1],
+      [b.r-1,b.c-1],[b.r-1,b.c+1],[b.r+1,b.c-1],[b.r+1,b.c+1],
+    ];
+    if (nbrs.some(([nr,nc]) => !occupied.has(nr+','+nc))) {
+      edgeCells.push(b);
+    }
+  }
+}
+
+// ─── noise-driven char selector that shifts slowly over time ───
+function pickChar(density, r, c) {
+  const set = CHARS[density] || CHARS[1];
+  const t   = frameCount * 0.012 + c * 0.17 + r * 0.11;
+  const idx = Math.floor((Math.sin(t) * 0.5 + 0.5) * set.length) % set.length;
+  return set[idx];
+}
+
+function draw() {
+  // soft trail — dark semi-transparent overlay
+  drawingContext.fillStyle = 'rgba(0,0,0,0.18)';
+  drawingContext.fillRect(0, 0, width, height);
+
+  // ── spawn aura particles ──
+  if (frameCount % 2 === 0) {
+    const e   = random(edgeCells);
+    const x   = OX + e.c * CW + CW * 0.5;
+    const y   = OY + e.r * CH + CH * 0.5;
+    const cx  = OX + COLS * CW * 0.5;
+    const cy  = OY + ROWS * CH * 0.5;
+    const ang = atan2(y - cy, x - cx) + random(-0.7, 0.7);
+    const spd = random(0.25, 1.1);
+    const pal = random(PALETTE.aura);
+
+    particles.push({
+      x, y,
+      vx:    cos(ang) * spd,
+      vy:    sin(ang) * spd,
+      char:  random(AURA_CHARS),
+      life:  1.0,
+      decay: random(0.004, 0.012),
+      size:  random(9, 20),
+      h: pal.h, s: pal.s, l: pal.l,
+    });
+  }
+
+  // ── draw body cells ──
+  textAlign(LEFT, TOP);
+  for (const b of bodyGrid) {
+    const x  = OX + b.c * CW;
+    const y  = OY + b.r * CH;
+    const ch = pickChar(b.density, b.r, b.c);
+
+    let col;
+    if (b.density === 3)      col = PALETTE.core;
+    else if (b.density === 2) col = PALETTE.mid;
+    else                      col = PALETTE.edge;
+
+    // subtle luminance pulse
+    const pulse = sin(frameCount * 0.04 + b.c * 0.2 + b.r * 0.15) * 8;
+    const ll    = col.l + pulse;
+
+    // glow
+    const glowSize = b.density === 3 ? 12 : b.density === 2 ? 8 : 5;
+    drawingContext.shadowBlur  = glowSize;
+    drawingContext.shadowColor = `hsl(${col.h},${col.s}%,${ll}%)`;
+
+    fill(`hsl(${col.h},${col.s}%,${ll}%)`);
+    textSize(12);
+    text(ch, x, y);
+  }
+
+  // ── draw & update particles ──
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x    += p.vx;
+    p.y    += p.vy;
+    p.vx   *= 0.997; // gentle drag
+    p.vy   *= 0.997;
+    p.life -= p.decay;
+
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+
+    const alpha = p.life;
+    const ll    = p.l;
+
+    drawingContext.shadowBlur  = map(p.life, 0, 1, 4, 28);
+    drawingContext.shadowColor = `hsla(${p.h},${p.s}%,${ll}%,${alpha})`;
+
+    fill(`hsla(${p.h},${p.s}%,${ll}%,${alpha})`);
+    textSize(p.size);
+    textAlign(CENTER, CENTER);
+    text(p.char, p.x, p.y);
+    textAlign(LEFT, TOP);
+  }
+
+  drawingContext.shadowBlur = 0;
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  OX = (width  - COLS * CW) / 2;
+  OY = (height - ROWS * CH) / 2;
+}
+</script>
+</body>
+</html>
